@@ -1,0 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Roboto:wght@300;400;500;700;900&display=swap");
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Montserrat", sans-serif;
+  font-family: "Roboto", sans-serif;
+}
+:root {
+  --primary-clr: #14c053;
+  --primary-font-clr: #42505c;
+  --secondary-font-clr: #404040;
+  --letter-spacing: 0.25px;
+  --line-height: 28px;
+  --heading-fs: 54px;
+  --secondary-bg-clr: #f9faff;
+}
+.body {
+  overflow-y: hidden !important;
+}
+.mt-5 {
+  margin-top: 5px !important;
+}
+.mr-10 {
+  margin-right: 10px;
+}
+.mt-100 {
+  margin-top: 100px !important;
+}
+.no-bg {
+  background: transparent !important;
+}
+.br-0 {
+  border-radius: 0 !important;
+}
+.mb-10 {
+  margin-bottom: 10px !important;
+}
+.fnt {
+  font-family: "Montserrat", sans-serif !important;
+}
+.fw-400 {
+  font-weight: 400 !important;
+}
+.red {
+  color: red !important;
+}
+.f12 {
+  font-size: 12px !important;
+}
+.f18 {
+  font-size: 18px !important;
+}
+.f22 {
+  font-size: 22px !important;
+}
+.w-50 {
+  width: 40px !important;
+}
+.cursor {
+  cursor: pointer !important;
+}
+.b-top {
+  border-top: 1px solid #f1f1f1 !important;
+}
+.b-bottom {
+  border-bottom: 1px solid #f1f1f1 !important;
+}
+.pr-clr {
+  color: #4743e0 !important;
+}

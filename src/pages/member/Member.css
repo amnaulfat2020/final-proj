@@ -1,0 +1,60 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap");
+
+.members-container {
+  width: 80% !important;
+  padding: 20px;
+  margin: auto;
+}
+
+.members-name {
+  text-transform: capitalize;
+  font-family: "Poppins", sans-serif !important;
+  margin: 0 !important;
+}
+
+.members-search {
+  width: 400px !important;
+}
+
+.members-card {
+  background-color: #f9faff !important;
+}
+
+.member-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+}
+
+.role-badge {
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-family: "Poppins", sans-serif;
+}
+
+.role-coach {
+  background-color: #e0f0ff;
+  color: #0b75c9;
+  border: 1px solid #0b75c9;
+}
+
+.role-player {
+  background-color: #f0fce3;
+  color: #4caf50;
+  border: 1px solid #4caf50;
+}
+
+.role-none {
+  background-color: #fce3e3;
+  color: #ff4d4f;
+  border: 1px solid #ff4d4f;
+}

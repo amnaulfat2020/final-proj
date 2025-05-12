@@ -1,0 +1,29 @@
+.admin-dashboard-container {
+    padding: 20px;
+  }
+  
+  .admin-dashboard-header {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .coach-requests-card {
+    margin-bottom: 20px;
+  }
+  
+  .no-requests {
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .coach-details {
+    padding: 10px;
+  }
+  
+  .action-buttons {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+  }

@@ -1,0 +1,7 @@
+@import "index.css";
+.ant-typography {
+  font-family: "Montserrat", sans-serif !important ;
+}
+.mt-50{
+  margin-top: 50px !important;
+}

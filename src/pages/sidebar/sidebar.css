@@ -1,0 +1,106 @@
+@import url(../../index.css);
+.logo-container {
+  border-bottom: 1px solid #f1f1f1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.logo {
+  width: 100px;
+  height: 100px;
+}
+.collapsed-logo {
+  display: none;
+}
+.colaps-img{
+  margin: 30px !important;
+}
+.side-bar {
+  height: 100vh;
+  width: 280px;
+  -webkit-transition: width 0.35s ease-in-out;
+  transition: width 0.35s ease-in-out;
+  border-right: 1px solid #f1f1f1;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-btn {
+  margin-top: 300px;
+  width: 65%;
+  height: 50px;
+  border-radius: 0px !important;
+  background: var(--primary-clr) !important;
+  color: #fff !important;
+  border: none;
+  margin: auto;
+}
+.sidebar-btn:hover {
+  background: #fff !important;
+  color: var(--primary-clr) !important;
+  border: 1px solid var(--primary-clr) !important;
+}
+.side-bar.collapsed {
+  width: 100px;
+  -webkit-transition: width 0.35s ease-in-out;
+  transition: width 0.35s ease-in-out;
+}
+
+.side-bar.collapsed .ant-menu-item {
+  display: flex;
+  align-items: center;
+}
+.ant-menu-title-content {
+  font-family: "Montserrat", sans-serif !important;
+}
+.side-bar.collapsed .ant-menu-item > span {
+  display: none;
+}
+.side-bar.collapsed .ant-menu-item > .anticon {
+  display: inline;
+}
+.ant-menu-item-selected {
+  background-color: #f9faff !important;
+  color: #4743e0 !important;
+  border-radius: 0 !important;
+}
+
+.ant-menu-item:hover {
+  border-radius: 0 !important;
+  background-color: #f9faff !important;
+  color: #4743e0 !important;
+}
+
+.custom-collapse-btn {
+  width: 30px;
+  height: 30px;
+  background-color: #ffffff;
+  color: #4743e0;
+  border-radius: 50%;
+  border: 1px solid #4743e0;
+  display: flex;
+  float: right;
+  margin: 70px -11px;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* Add these styles to your existing sidebar.css */
+.ant-badge-dot {
+  box-shadow: none;
+}
+
+.ant-menu-item .ant-badge {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ant-menu-item .ant-badge-dot {
+  margin-left: 8px;
+  margin-top: -2px;
+}
+
+.collapsed .ant-badge-dot {
+  position: absolute;
+  right: 10px;
+  top: 12px;
+}

@@ -1,0 +1,8 @@
+{
+  "short_name": "Task Trek",
+  "name": "Task Trek | PMS (Project Management System)",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}
