@@ -1,0 +1,35 @@
+.player-evaluation-container {
+    padding: 24px;
+  }
+  
+  .evaluation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  
+  .eval-scores {
+    margin-top: 12px;
+  }
+  
+  .eval-score-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .eval-score-item > * {
+    margin-right: 8px;
+  }
+  
+  .eval-comments {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #f0f0f0;
+  }
+  
+  .evaluation-history {
+    max-height: 300px;
+    overflow-y: auto;
+  }

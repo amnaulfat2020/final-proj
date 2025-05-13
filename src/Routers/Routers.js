@@ -19,6 +19,8 @@ import RequestDeclined from '../pages/requestDeclined/RequestDeclined';
 import PendingApproval from '../pages/pendingApproval/PendingApproval';
 import Teams from '../pages/team/Team';
 import Conversations from '../pages/conversations/Conversations';
+import PlayerEvaluation from '../pages/evaluation/playerevaluation';
+import PlayerReport from '../pages/report/PlayerReport';
 
 const Routers = () => {
   return (
@@ -41,7 +43,8 @@ const Routers = () => {
           <Route path="/pending-approval" element={<PendingApproval />} />
           <Route path="*" element={<NotFound />} />
           <Route path="/dashboard/conversations/:userId" element={<LayoutSideBar currentPage="Conversations"><Conversations /></LayoutSideBar>} />
-
+          <Route path="/dashboard/player-evaluation/:userId" element={<LayoutSideBar currentPage="PlayerEvaluation"><PlayerEvaluation /></LayoutSideBar>} />
+          <Route path="/dashboard/player-report/:userId/:playerId" element={<LayoutSideBar currentPage="PlayerReport"><PlayerReport /></LayoutSideBar>} />
           <Route path="/error" element={<Error />} />
         </Routes>
       </Router>

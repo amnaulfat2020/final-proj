@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   UserOutlined, FileOutlined, LogoutOutlined, 
   TeamOutlined, MenuUnfoldOutlined, MenuFoldOutlined,
-  UsergroupAddOutlined, MessageOutlined
+  UsergroupAddOutlined, MessageOutlined, FormOutlined
 } from '@ant-design/icons';
 import { Menu, Button, Badge } from 'antd';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -78,14 +78,16 @@ const Sidebar = () => {
     { type: 'divider' },
     getItem('Teams', 'sub3', <TeamOutlined />, null, 'item'),
     { type: 'divider' },
+    getItem('Player Evaluation', 'sub6', <FormOutlined />, null, 'item'),
+    { type: 'divider' }, 
     getItem('Members', 'sub4', <UsergroupAddOutlined />, null, 'item'),
     { type: 'divider' },
     getItem(
       <Badge dot={unreadCount > 0}>Conversations</Badge>, 
       'sub5', 
-      <Badge dot={unreadCount > 0}>
+      // <Badge dot={unreadCount > 0}>
         <MessageOutlined />
-      </Badge>
+      // </Badge>
     ),
     { type: 'divider' },
   ];
@@ -116,6 +118,7 @@ const Sidebar = () => {
             if (key === 'sub2') navigate(`/dashboard/event/${userId}`);
             if (key === 'sub3') navigate(`/dashboard/teams/${userId}`);
             if (key === 'sub4') navigate(`/members/${userId}`);
+            if (key === 'sub6') navigate(`/dashboard/player-evaluation/${userId}`);
             if (key === 'sub5') navigate(`/dashboard/conversations/${userId}`);
           }}
           inlineCollapsed={collapsed}

@@ -1,0 +1,44 @@
+.player-report-container {
+    padding: 24px;
+  }
+  
+  .report-card {
+    margin-top: 16px;
+  }
+  
+  .report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+  
+  .report-actions {
+    margin-left: 16px;
+  }
+  
+  .skill-charts {
+    margin-top: 24px;
+  }
+  
+  .skill-item {
+    margin-bottom: 16px;
+  }
+  
+  .skill-item .ant-progress {
+    margin-top: 8px;
+  }
+  
+  .recommendation-list {
+    margin-top: 16px;
+  }
+  
+  @media print {
+    .report-actions {
+      display: none;
+    }
+    
+    .player-report-container {
+      padding: 0;
+    }
+  }

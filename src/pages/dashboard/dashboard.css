@@ -247,3 +247,80 @@
   padding: 16px;
   margin-top: 16px;
 }
+/* Analytics Section */
+.analytics-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.section-title {
+  margin-bottom: 20px !important;
+  display: flex;
+  align-items: center;
+}
+
+.section-title .anticon {
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+/* Stat Cards */
+.stat-card {
+  height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+}
+
+.stat-icon {
+  font-size: 24px;
+  margin-right: 16px;
+  color: #1890ff;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.stat-value {
+  margin: 0 !important;
+  color: #333;
+}
+
+/* Chart Containers */
+.ant-card .chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .stat-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .stat-icon {
+    margin-right: 0;
+    margin-bottom: 8px;
+  }
+  
+  .analytics-section {
+    padding: 8px;
+  }
+}
