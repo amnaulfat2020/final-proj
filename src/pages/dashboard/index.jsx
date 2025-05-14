@@ -17,7 +17,11 @@ import {
   TeamOutlined,
   CalendarOutlined,
   TrophyOutlined,
-  UserOutlined
+  UserOutlined,
+  UpOutlined, 
+  DownOutlined,
+  CheckOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import ContentLoader from '../contentLoader/ContentLoader';
@@ -31,7 +35,11 @@ import {
   query, 
   where,
   onSnapshot,
-  Timestamp
+  Timestamp,
+  updateDoc,
+  arrayRemove,
+  arrayUnion,
+  writeBatch
 } from 'firebase/firestore';
 import { Bar, Pie, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, 
@@ -57,6 +65,19 @@ ChartJS.register(
 
 const { Title: AntTitle, Text } = Typography;
 
+// Helper function for formatting dates
+const formatDate = (date) => {
+  if (!date) return 'N/A';
+  const options = { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  };
+  return new Date(date).toLocaleDateString('en-US', options);
+};
+
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
@@ -67,7 +88,11 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { userId } = useParams();
   const [events, setEvents] = useState([]);
-
+  
+  // Add state for approval requests functionality
+  const [approvalRequests, setApprovalRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
   
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -91,6 +116,11 @@ const Dashboard = () => {
             
             setUserData(userDataFromDB);
             await fetchDashboardData(userDataFromDB);
+            
+            // If user is a coach, fetch approval requests
+            if (userDataFromDB.userType === 'coach') {
+              fetchApprovalRequests(userDataFromDB);
+            }
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -106,6 +136,83 @@ const Dashboard = () => {
 
     return () => unsubscribe();
   }, [navigate]);
+  
+  // Function to fetch approval requests
+  const fetchApprovalRequests = async (userData) => {
+    try {
+      const requestsRef = collection(db, "approvalRequests");
+      const q = query(
+        requestsRef,
+        where("coachEmail", "==", userData.email),
+        where("status", "==", "pending")
+      );
+      
+      // First, get initial data
+      const querySnapshot = await getDocs(q);
+      const requests = [];
+      querySnapshot.forEach((doc) => {
+        requests.push({ id: doc.id, ...doc.data() });
+      });
+      setApprovalRequests(requests);
+      
+      // Then set up real-time listener
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const updatedRequests = [];
+        snapshot.forEach((doc) => {
+          updatedRequests.push({ id: doc.id, ...doc.data() });
+        });
+        setApprovalRequests(updatedRequests);
+      });
+      
+      setLoadingRequests(false);
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error fetching approval requests:", error);
+      setLoadingRequests(false);
+    }
+  };
+  
+  // Functions to handle approval/decline
+  const handleApproveRequest = async (requestId, playerEmail, game) => {
+    try {
+      // Update the request status
+      const requestRef = doc(db, "approvalRequests", requestId);
+      await updateDoc(requestRef, {
+        status: "approved",
+        approvedAt: Timestamp.now()
+      });
+      
+      // Update the player's document
+      const playerRef = doc(db, "users", playerEmail);
+      await updateDoc(playerRef, {
+        pendingApprovals: arrayRemove({
+          game: game,
+          status: "pending"
+        }),
+        approvedGames: arrayUnion(game),
+        status: "approved"
+      });
+      
+      message.success("Player approved successfully");
+    } catch (error) {
+      console.error("Error approving request:", error);
+      message.error("Failed to approve player");
+    }
+  };
+
+  const handleDeclineRequest = async (requestId) => {
+    try {
+      const requestRef = doc(db, "approvalRequests", requestId);
+      await updateDoc(requestRef, {
+        status: "declined",
+        declinedAt: Timestamp.now()
+      });
+      message.success("Request declined");
+    } catch (error) {
+      console.error("Error declining request:", error);
+      message.error("Failed to decline request");
+    }
+  };
 
   const fetchDashboardData = async (userData) => {
     try {
@@ -335,6 +442,89 @@ const Dashboard = () => {
         <div className="dashboard-header">
           <AntTitle level={2}>Coach Dashboard</AntTitle>
           <Badge.Ribbon text="Coach Account" color="blue" />
+          {approvalRequests.length > 0 && (
+            <Badge 
+              count={approvalRequests.length} 
+              style={{ 
+                marginLeft: 10,
+                backgroundColor: '#ff4d4f',
+                fontSize: '14px'
+              }} 
+            />
+          )}
+        </div>
+        
+        {/* Approval Requests Section (Added from Code 1) */}
+        <div className="approval-requests-section">
+          <div 
+            className="approval-header"
+            onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
+          >
+            <AntTitle level={3}>
+              Pending Approval Requests 
+              <Badge 
+                count={approvalRequests.length} 
+                style={{ 
+                  marginLeft: 10,
+                  backgroundColor: approvalRequests.length > 0 ? '#ff4d4f' : '#d9d9d9'
+                }} 
+              />
+            </AntTitle>
+            <Button 
+              type="text" 
+              icon={showApprovalDropdown ? <UpOutlined /> : <DownOutlined />}
+            />
+          </div>
+          
+          {showApprovalDropdown && (
+            loadingRequests ? (
+              <ContentLoader />
+            ) : approvalRequests.length > 0 ? (
+              <div className="requests-dropdown">
+                {approvalRequests.map((request) => (
+                  <Card 
+                    key={request.id} 
+                    className="request-card"
+                    hoverable
+                  >
+                    <div className="request-content">
+                      <Avatar 
+                        size="large" 
+                        icon={<UserOutlined />}
+                        style={{ backgroundColor: '#1890ff' }}
+                      />
+                      <div className="request-details">
+                        <Text strong>{request.playerEmail}</Text>
+                        <Text type="secondary">{request.game}</Text>
+                        <Text type="secondary" className="request-time">
+                          {formatDate(request.createdAt?.toDate())}
+                        </Text>
+                      </div>
+                    </div>
+                    <div className="request-actions">
+                      <Button 
+                        type="primary" 
+                        shape="circle"
+                        icon={<CheckOutlined />}
+                        onClick={() => handleApproveRequest(request.id, request.playerEmail, request.game)}
+                      />
+                      <Button 
+                        danger 
+                        shape="circle"
+                        icon={<CloseOutlined />}
+                        onClick={() => handleDeclineRequest(request.id)}
+                        style={{ marginLeft: 8 }}
+                      />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="empty-requests">
+                <Text>No pending approval requests</Text>
+              </Card>
+            )
+          )}
         </div>
 
         {/* Analytics Section */}
