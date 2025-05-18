@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   collection, getDocs, doc, setDoc, updateDoc, 
   query, where, arrayUnion, addDoc, serverTimestamp 
@@ -31,11 +31,8 @@ const Teams = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [teams, setTeams] = useState([]);
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  const navigate = useNavigate();
   const [userType, setUserType] = useState('');
-  const [selectedParticipants, setSelectedParticipants] = useState([]);
-  const [teamName, setTeamName] = useState('');
-  const [form] = Form.useForm();
   const [allUsers, setAllUsers] = useState({});
   const [playerTeams, setPlayerTeams] = useState([]);
   const [playerEvents, setPlayerEvents] = useState([]);
@@ -153,7 +150,6 @@ const Teams = () => {
               id: participantId,
               name: `${userDoc.data().firstName || ''} ${userDoc.data().lastName || ''}`.trim() || userDoc.id,
               email: userDoc.id,
-              age: userDoc.data().age || 'N/A',
               games: userDoc.data().selectedGames || []
             };
           }
@@ -170,108 +166,6 @@ const Teams = () => {
       }
     } else {
       setParticipants([]);
-    }
-  };
-
-  const showCreateTeamModal = () => {
-    setIsModalVisible(true);
-    setTeamName('');
-    form.resetFields();
-    
-    const tomorrow = moment().add(1, 'days').set({ hour: 10, minute: 0, second: 0 });
-    form.setFieldsValue({
-      matchDate: tomorrow,
-      matchTime: tomorrow
-    });
-  };
-
-  const handleModalCancel = () => {
-    setIsModalVisible(false);
-  };
-
-  const handleCreateTeam = async () => {
-    try {
-      const values = await form.validateFields();
-      const teamName = values.teamName;
-      const matchDate = values.matchDate;
-      const matchTime = values.matchTime;
-
-      if (selectedParticipants.length === 0) {
-        message.error('Please select participants for the team', 3);
-        return;
-      }
-
-      if (!selectedEvent) {
-        message.error('No event selected', 3);
-        return;
-      }
-
-      const requiredTeamSize = teamSizeConfig[selectedEvent.gameType] || 2;
-      if (selectedParticipants.length !== requiredTeamSize) {
-        message.warning(`${selectedEvent.gameType} teams require exactly ${requiredTeamSize} players. You selected ${selectedParticipants.length}.`, 4);
-        return;
-      }
-
-      const matchDateTime = matchDate.clone();
-      matchDateTime.set({
-        hour: matchTime.hour(),
-        minute: matchTime.minute(),
-        second: 0
-      });
-
-      const teamData = {
-        name: teamName,
-        eventId: selectedEvent.id,
-        eventName: selectedEvent.title,
-        gameType: selectedEvent.gameType,
-        coachId: userId,
-        participants: selectedParticipants,
-        matchDateTime: matchDateTime.toISOString(),
-        createdAt: new Date().toISOString()
-      };
-
-      const teamRef = doc(collection(db, 'teams'));
-      await setDoc(teamRef, teamData);
-
-      const updatePlayerPromises = selectedParticipants.map(async (playerId) => {
-        const userQuery = query(collection(db, 'users'), where('uniqueId', '==', playerId));
-        const querySnapshot = await getDocs(userQuery);
-        if (!querySnapshot.empty) {
-          const userDoc = querySnapshot.docs[0];
-          const userRef = doc(db, 'users', userDoc.id);
-          await updateDoc(userRef, {
-            teams: arrayUnion({
-              teamId: teamRef.id,
-              teamName: teamName,
-              eventId: selectedEvent.id,
-              eventName: selectedEvent.title,
-              gameType: selectedEvent.gameType,
-              matchDateTime: matchDateTime.toISOString(),
-              coachId: userId
-            })
-          });
-        }
-      });
-
-      await Promise.all(updatePlayerPromises);
-
-      message.success('Team created successfully!', 3);
-      setIsModalVisible(false);
-      setSelectedParticipants([]);
-      
-      // Refresh teams list
-      const teamsQuery = query(collection(db, 'teams'), where('coachId', '==', userId));
-      const teamsSnapshot = await getDocs(teamsQuery);
-      const updatedTeams = [];
-      
-      teamsSnapshot.forEach((doc) => {
-        updatedTeams.push({ id: doc.id, ...doc.data() });
-      });
-      
-      setTeams(updatedTeams);
-    } catch (error) {
-      console.error('Error creating team:', error);
-      message.error('Failed to create team', 3);
     }
   };
 
@@ -401,9 +295,9 @@ const Teams = () => {
   };
 
   const getParticipantColumns = () => {
-    const baseColumns = [
+    return [
       {
-        title: 'Name',
+        title: 'Player',
         dataIndex: 'name',
         key: 'name',
         render: (text, record) => (
@@ -418,11 +312,7 @@ const Teams = () => {
         dataIndex: 'email',
         key: 'email',
       },
-      {
-        title: 'Age',
-        dataIndex: 'age',
-        key: 'age',
-      },
+    
       {
         title: 'Games',
         dataIndex: 'games',
@@ -438,46 +328,6 @@ const Teams = () => {
         ),
       }
     ];
-
-    if (userType === 'player') {
-      baseColumns.push({
-        title: 'Team Status',
-        key: 'teamStatus',
-        render: (_, record) => {
-          const playerTeamsForEvent = playerTeams.filter(team => 
-            team.eventId === selectedEvent?.id && 
-            team.participants.includes(record.id)
-          );
-          
-          if (playerTeamsForEvent.length === 0) {
-            return <Tag color="default">No team assigned</Tag>;
-          }
-          
-          return (
-            <Popover
-              title="Team Information"
-              content={
-                <div>
-                  {playerTeamsForEvent.map(team => (
-                    <div key={team.id} style={{ marginBottom: 8 }}>
-                      <p><strong>Team:</strong> {team.name}</p>
-                      <p><strong>Coach:</strong> {allUsers[team.coachId]?.name || 'Unknown'}</p>
-                      <p><strong>Match:</strong> {formatDateTime(team.matchDateTime).date} at {formatDateTime(team.matchDateTime).time}</p>
-                    </div>
-                  ))}
-                </div>
-              }
-            >
-              <Badge count={playerTeamsForEvent.length}>
-                <Tag color="green">In Team</Tag>
-              </Badge>
-            </Popover>
-          );
-        }
-      });
-    }
-
-    return baseColumns;
   };
 
   const renderCoachTeamsView = () => {
@@ -656,7 +506,7 @@ const Teams = () => {
                     <Button 
                       type="primary" 
                       icon={<PlusOutlined />} 
-                      onClick={showCreateTeamModal}
+                      onClick={() => navigate(`/dashboard/teams/create/${userId}/${selectedEvent.id}`)}
                       disabled={participants.length === 0}
                     >
                       Create Team
@@ -668,13 +518,6 @@ const Teams = () => {
                       dataSource={participants} 
                       columns={getParticipantColumns()} 
                       rowKey="id"
-                      rowSelection={{
-                        type: 'checkbox',
-                        onChange: (selectedRowKeys) => {
-                          setSelectedParticipants(selectedRowKeys);
-                        },
-                        selectedRowKeys: selectedParticipants,
-                      }}
                       pagination={{ pageSize: 10 }}
                     />
                   ) : (
@@ -697,97 +540,6 @@ const Teams = () => {
               {renderCoachTeamsView()}
             </TabPane>
           </Tabs>
-
-          <Modal
-            title="Create New Team"
-            visible={isModalVisible}
-            onCancel={handleModalCancel}
-            footer={[
-              <Button key="back" onClick={handleModalCancel}>
-                Cancel
-              </Button>,
-              <Button 
-                key="submit" 
-                type="primary" 
-                onClick={handleCreateTeam}
-              >
-                Create Team
-              </Button>,
-            ]}
-            width={600}
-          >
-            <Form form={form} layout="vertical">
-              <Form.Item
-                name="teamName"
-                label="Team Name"
-                rules={[{ required: true, message: 'Please enter a team name' }]}
-              >
-                <Input placeholder="Enter team name" />
-              </Form.Item>
-              
-              <div className="match-date-time">
-                <h4>Schedule Match</h4>
-                <Space size={16}>
-                  <Form.Item
-                    name="matchDate"
-                    label="Match Date"
-                    rules={[{ required: true, message: 'Please select a match date' }]}
-                  >
-                    <DatePicker 
-                      format="YYYY-MM-DD" 
-                      placeholder="Select date"
-                      disabledDate={(current) => {
-                        return current && current < moment().startOf('day');
-                      }}
-                    />
-                  </Form.Item>
-                  
-                  <Form.Item
-                    name="matchTime"
-                    label="Match Time"
-                    rules={[{ required: true, message: 'Please select a match time' }]}
-                  >
-                    <TimePicker 
-                      format="h:mm A" 
-                      use12Hours 
-                      placeholder="Select time"
-                    />
-                  </Form.Item>
-                </Space>
-              </div>
-
-              {selectedEvent && (
-                <div className="modal-info">
-                  <p><strong>Event:</strong> {selectedEvent.title}</p>
-                  <p><strong>Game Type:</strong> {selectedEvent.gameType}</p>
-                  <p>
-                    <strong>Required Players per Team:</strong> 
-                    {teamSizeConfig[selectedEvent.gameType] === 1 
-                      ? ' Individual participation' 
-                      : ` ${teamSizeConfig[selectedEvent.gameType] || 'Not specified'}`}
-                  </p>
-                  <p><strong>Selected Players:</strong> {selectedParticipants.length}</p>
-                  
-                  <List
-                    size="small"
-                    header={<div className="player-list-header">Selected Players</div>}
-                    bordered
-                    className="selected-players-list"
-                    dataSource={selectedParticipants.map(id => {
-                      const player = participants.find(p => p.id === id);
-                      return player || { id, name: getPlayerDisplayName(id) };
-                    })}
-                    renderItem={player => (
-                      <List.Item key={player.id} className="player-list-item">
-                        <UserOutlined style={{ marginRight: 8 }} /> {player.name}
-                      </List.Item>
-                    )}
-                    locale={{ emptyText: "No players selected yet. Please select players from the table first." }}
-                  />
-                </div>
-              )}
-            </Form>
-          </Modal>
         </>
       )}
     </div>

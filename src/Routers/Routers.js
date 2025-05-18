@@ -21,6 +21,7 @@ import Teams from '../pages/team/Team';
 import Conversations from '../pages/conversations/Conversations';
 import PlayerEvaluation from '../pages/evaluation/playerevaluation';
 import PlayerReport from '../pages/report/PlayerReport';
+import CreateTeamPage from '../pages/team/CreateTeamPage';
 
 const Routers = () => {
   return (
@@ -35,6 +36,10 @@ const Routers = () => {
           <Route path="/forget-password" element={<ForgetPassword />} />
           <Route path="/" element={<Login />} />
           <Route path="/dashboard/teams/:userId" element={<LayoutSideBar currentPage="Teams"><Teams /></LayoutSideBar>} /> {/* New Teams route */}
+          <Route 
+  path="/dashboard/teams/create/:userId/:eventId" 
+  element={<LayoutSideBar currentPage="Teams"><CreateTeamPage /></LayoutSideBar>} 
+/>
           <Route path="/register" element={<Registration />} />
           {/* <Route path="/term-condition" element={<TermAndCondition />} /> */}
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
