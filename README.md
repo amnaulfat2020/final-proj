@@ -1,49 +1,101 @@
-# TaskTrek Project Management Dashboard
+# VU Sport Society Management Dashboard
 
 ## Project Overview
 
-The TaskTrek Project Management Dashboard is a comprehensive task management tool designed to optimize team collaboration and productivity. It provides a user-friendly interface for teams to create, assign, track tasks, and monitor progress in real-time, ultimately enhancing overall project efficiency.
+VU Sport Society Management Dashboard is a powerful, user-friendly platform designed to streamline the management of sports societies, events, and teams. It enables organizers to plan, assign, and monitor society activities, ensuring smooth coordination, enhanced member engagement, and event success.
+
 
 ## Key Features
 
-### 1. Task Creation, Assignment, and Priority Setting
+### 1. Event Creation, Team Assignment & Role Management
 
-- Intuitive task creation with options for adding titles, descriptions, and due dates.
-- Assignment of tasks to specific team members, ensuring clear responsibilities.
-- Priority setting to differentiate urgent tasks from routine ones.
+- Simple event creation with title, description, dates, and venues.
+- Assign roles (organizer, team captain, volunteers) for clear responsibility distribution.
+- Set priorities for urgent tasks like match fixtures, registrations, and logistics.
+### 2. Real-Time Activity & Status Tracking
 
-### 2. Task Status Tracking
+- Track progress of events: planning, scheduled, ongoing, or completed.
+- Visual indicators show activity statuses (color-coded for clarity).
+- Keep an eye on overall event readiness and deadlines.
 
-- Dynamic task status updates (e.g., to-do, in progress, completed) reflecting real-time progress.
-- Visual indicators to easily identify task statuses on the dashboard.
-- Instant insight into the overall project progress.
+### 3. Member Filtering and Role-Based Sorting
 
-### 3. Task Filtering and Sorting Options
+- Filter members by sport (e.g., football, cricket, athletics), roles, or task involvement.
+- Sort lists based on event participation, availability, or activity completion.
+- Allow each team leader or participant to view tasks relevant to their roles.
 
-- Versatile filtering based on task status, assignee, priority, and more.
-- Sorting options to organize tasks by due date, priority, or alphabetical order.
-- Custom views for team members to focus on their individual tasks.
 
-### 4. User-Friendly Interface for Easy Navigation
 
-- Intuitive design and layout for effortless task management.
-- Clear categorization of tasks, making it easy to find and interact with them.
-- Streamlined navigation to access different sections of the dashboard.
+### 4. Intuitive Interface with Easy Navigation
 
-### 5. Mobile Responsiveness for Accessibility on Various Devices
+- Clean and organized design tailored for sports societies.
+- Quick access to events, teams, member profiles, and announcements.
+- Drag-and-drop interface for organizing schedules and volunteer shifts.
 
-- Fully responsive design ensuring usability on desktops, tablets, and smartphones.
-- Seamless transition between devices, enabling task management on the go.
+
+### 5. Mobile-Friendly Design for On-the-Go Use
+
+- 100% mobile-responsive — works smoothly on phones, tablets, and desktops.
+- Update attendance, schedules, or announcements from anywhere.
+- Stay connected with team updates even during live events or tournaments.
 
 ## Benefits
 
-- Streamlined task management and progress tracking.
-- Enhanced team collaboration and communication.
-- Improved project visibility and timely completion of tasks.
-- Accessibility and usability across various devices for remote and mobile work.
+- Efficient planning and management of multiple sports and events.
+
+- Boosted participation through transparent communication and task visibility.
+
+- Enhanced team collaboration, especially during large-scale events or tournaments.
+
+- Access and manage all society activities from any device, anytime.
+
+
 
 ## Conclusion
 
-The TaskTrek Project Management Dashboard offers a comprehensive solution for teams seeking efficient task management and collaboration. By providing an intuitive interface, real-time updates, and collaborative tools, the dashboard contributes to increased productivity, better project organization, and successful task completion.
+The VU Sport Society Management Dashboard is your all-in-one solution for handling the complexity of running a sports society. From event creation to task delegation and real-time coordination, it empowers your team to stay organized, motivated, and focused on achieving event success.
 
 ---
+## Code--path src/utils/constants/Firebase.js
+
+## Code
+
+
+import { initializeApp } from "firebase/app";
+import { getStorage } from 'firebase/storage';
+import {
+  getAuth, getAdditionalUserInfo
+} from 'firebase/auth';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyADJOychWZmmMuLz4HVgC8-1R3C-NurqVk",
+  authDomain: "vu-project-7e956.firebaseapp.com",
+  projectId: "vu-project-7e956",
+  storageBucket: "vu-project-7e956.firebasestorage.app",
+  messagingSenderId: "1005236782129",
+  appId: "1:1005236782129:web:5ab73299e7c67a9a93c110",
+  // measurementId: "G-VRDJBMFGM8"
+};
+
+const app = initializeApp(firebaseConfig);
+export const storage = getStorage(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+export { app, auth, db };
+
+export const getUserIdByEmail = async (email) => {
+  try {
+    const userRef = doc(db, 'users', email);
+    const userDoc = await getDoc(userRef);
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return userData.uniqueId;
+    }
+    return null; 
+  } catch (error) {
+    console.error('Error fetching user ID:', error);
+    return null;
+  }
+
+};
