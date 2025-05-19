@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Button, Card, Table, Tag, Select, 
@@ -9,7 +9,8 @@ import {
 import { 
   TeamOutlined, UserOutlined, PlusOutlined, 
   TrophyOutlined, CalendarOutlined, 
-  ClockCircleOutlined, ArrowLeftOutlined 
+  ClockCircleOutlined, ArrowLeftOutlined,
+  LockOutlined
 } from '@ant-design/icons';
 import moment from 'moment';
 import { db } from '../../utils/constants/Firebase';
@@ -29,6 +30,8 @@ const CreateTeamPage = () => {
   const [teamMembers, setTeamMembers] = useState([]);
   const [form] = Form.useForm();
   const [allUsers, setAllUsers] = useState({});
+  const [existingTeams, setExistingTeams] = useState([]);
+  const [assignedParticipants, setAssignedParticipants] = useState(new Set());
 
   const teamSizeConfig = {
     'Football': 11,
@@ -40,6 +43,39 @@ const CreateTeamPage = () => {
     'Table Tennis': 2,
     'Swimming': 1
   };
+
+  // Save state to localStorage
+  const saveStateToLocalStorage = useCallback(() => {
+    const state = {
+      selectedEvent,
+      teamMembers,
+      formValues: form.getFieldsValue(),
+      timestamp: Date.now()
+    };
+    localStorage.setItem(`createTeam_${userId}_${eventId || 'noEvent'}`, JSON.stringify(state));
+  }, [selectedEvent, teamMembers, form, userId, eventId]);
+
+  // Load state from localStorage
+  const loadStateFromLocalStorage = useCallback(() => {
+    const savedState = localStorage.getItem(`createTeam_${userId}_${eventId || 'noEvent'}`);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        // Check if state is not too old (1 hour)
+        if (Date.now() - state.timestamp < 3600000) {
+          return state;
+        }
+      } catch (error) {
+        console.error('Error parsing saved state:', error);
+      }
+    }
+    return null;
+  }, [userId, eventId]);
+
+  // Clear saved state
+  const clearSavedState = useCallback(() => {
+    localStorage.removeItem(`createTeam_${userId}_${eventId || 'noEvent'}`);
+  }, [userId, eventId]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,7 +119,34 @@ const CreateTeamPage = () => {
           const preselectedEvent = eventsData.find(e => e.id === eventId);
           if (preselectedEvent) {
             setSelectedEvent(preselectedEvent);
-            await loadParticipants(preselectedEvent, usersMap);
+            await fetchExistingTeams(eventId);
+            await loadParticipants(preselectedEvent, usersMap, eventId);
+          }
+        }
+
+        // Load saved state after initial data is loaded
+        const savedState = loadStateFromLocalStorage();
+        if (savedState) {
+          if (savedState.selectedEvent && (!eventId || savedState.selectedEvent.id === eventId)) {
+            setSelectedEvent(savedState.selectedEvent);
+            if (savedState.selectedEvent.id !== eventId) {
+              await fetchExistingTeams(savedState.selectedEvent.id);
+              await loadParticipants(savedState.selectedEvent, usersMap, savedState.selectedEvent.id);
+            }
+          }
+          if (savedState.teamMembers) {
+            setTeamMembers(savedState.teamMembers);
+          }
+          if (savedState.formValues) {
+            // Restore form values, converting moment objects
+            const formValues = { ...savedState.formValues };
+            if (formValues.matchDate && typeof formValues.matchDate === 'string') {
+              formValues.matchDate = moment(formValues.matchDate);
+            }
+            if (formValues.matchTime && typeof formValues.matchTime === 'string') {
+              formValues.matchTime = moment(formValues.matchTime, 'HH:mm');
+            }
+            form.setFieldsValue(formValues);
           }
         }
       } catch (error) {
@@ -95,37 +158,101 @@ const CreateTeamPage = () => {
     };
 
     fetchData();
-  }, [userId, eventId]);
+  }, [userId, eventId, loadStateFromLocalStorage, form]);
 
-  const loadParticipants = async (event, usersMap = allUsers) => {
+  // Save state whenever it changes
+  useEffect(() => {
+    if (!loading && selectedEvent) {
+      saveStateToLocalStorage();
+    }
+  }, [selectedEvent, teamMembers, saveStateToLocalStorage, loading]);
+
+  // Save form values on change
+  const handleFormValuesChange = useCallback(() => {
+    if (!loading && selectedEvent) {
+      // Delay to avoid too frequent saves
+      const timeoutId = setTimeout(saveStateToLocalStorage, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [saveStateToLocalStorage, loading, selectedEvent]);
+
+  // Fetch existing teams for the selected event
+  const fetchExistingTeams = async (eventId) => {
+    try {
+      const teamsQuery = query(
+        collection(db, 'teams'), 
+        where('eventId', '==', eventId),
+        where('coachId', '==', userId)
+      );
+      const teamsSnapshot = await getDocs(teamsQuery);
+      const teamsData = [];
+      
+      teamsSnapshot.forEach(doc => {
+        teamsData.push({ 
+          id: doc.id, 
+          ...doc.data() 
+        });
+      });
+      
+      setExistingTeams(teamsData);
+      
+      // Update assigned participants set
+      const assignedSet = new Set();
+      teamsData.forEach(team => {
+        if (team.participants) {
+          team.participants.forEach(participantId => {
+            assignedSet.add(participantId);
+          });
+        }
+      });
+      setAssignedParticipants(assignedSet);
+    } catch (error) {
+      console.error('Error fetching existing teams:', error);
+    }
+  };
+
+  const loadParticipants = async (event, usersMap = allUsers, currentEventId = null) => {
     if (!event || !event.participants || event.participants.length === 0) {
       setParticipants([]);
-      setTeamMembers([]);
       return;
     }
 
     try {
       setLoading(true);
       
+      // Get current assigned participants for this specific event
+      if (currentEventId) {
+        await fetchExistingTeams(currentEventId);
+      }
+      
       const participantData = event.participants
         .map(participantId => {
           const user = usersMap[participantId];
           if (user) {
+            const isAssigned = assignedParticipants.has(participantId);
             return {
               key: participantId,
               id: participantId,
               name: user.name,
               email: user.email,
               age: user.age || 'N/A',
-              games: user.selectedGames || []
+              games: user.selectedGames || [],
+              isAssigned
             };
           }
           return null;
         })
         .filter(Boolean);
 
-      setParticipants(participantData);
-      setTeamMembers([]);
+      // Only show unassigned participants in the available list
+      const availableParticipants = participantData.filter(p => !p.isAssigned);
+      setParticipants(availableParticipants);
+
+      // Show info about assigned participants
+      const assignedCount = participantData.length - availableParticipants.length;
+      if (assignedCount > 0) {
+        message.info(`${assignedCount} participant(s) are already assigned to other teams in this event`);
+      }
     } catch (error) {
       console.error('Error loading participants:', error);
       message.error('Failed to load participants');
@@ -138,12 +265,17 @@ const CreateTeamPage = () => {
     const event = events.find(e => e.id === eventId);
     setSelectedEvent(event);
     setTeamMembers([]);
+    form.resetFields();
     
     if (event) {
-      await loadParticipants(event);
+      await fetchExistingTeams(eventId);
+      await loadParticipants(event, allUsers, eventId);
       navigate(`/dashboard/teams/create/${userId}/${eventId}`);
     } else {
       navigate(`/dashboard/teams/create/${userId}`);
+      setExistingTeams([]);
+      setAssignedParticipants(new Set());
+      clearSavedState();
     }
   };
 
@@ -167,6 +299,14 @@ const CreateTeamPage = () => {
     if (source.droppableId === 'participants' && destination.droppableId === 'team') {
       if (teamMembers.length >= requiredTeamSize) {
         message.warning(`This team can only have ${requiredTeamSize} players`);
+        return;
+      }
+
+      const draggedParticipant = participants[source.index];
+      
+      // Double-check if participant is assigned (safety check)
+      if (assignedParticipants.has(draggedParticipant.id)) {
+        message.error(`${draggedParticipant.name} is already assigned to another team`);
         return;
       }
 
@@ -226,6 +366,14 @@ const CreateTeamPage = () => {
         return;
       }
 
+      // Final check that none of the selected team members are already assigned
+      const conflictingMembers = teamMembers.filter(member => assignedParticipants.has(member.id));
+      
+      if (conflictingMembers.length > 0) {
+        message.error(`The following participants are already assigned to other teams: ${conflictingMembers.map(m => m.name).join(', ')}`);
+        return;
+      }
+
       const matchDateTime = matchDate.clone();
       matchDateTime.set({
         hour: matchTime.hour(),
@@ -268,6 +416,9 @@ const CreateTeamPage = () => {
 
       await Promise.all(updatePlayerPromises);
 
+      // Clear saved state after successful creation
+      clearSavedState();
+
       message.success('Team created successfully!');
       navigate(`/dashboard/teams/${userId}`);
     } catch (error) {
@@ -290,6 +441,25 @@ const CreateTeamPage = () => {
     return colors[gameType] || 'default';
   };
 
+  // Calculate statistics for better UX
+  const getEventStatistics = () => {
+    if (!selectedEvent) return null;
+    
+    const totalParticipants = selectedEvent.participants?.length || 0;
+    const assignedCount = assignedParticipants.size;
+    const availableCount = totalParticipants - assignedCount;
+    const requiredTeamSize = teamSizeConfig[selectedEvent.gameType] || 2;
+    const possibleTeams = Math.floor(availableCount / requiredTeamSize);
+    
+    return {
+      totalParticipants,
+      assignedCount,
+      availableCount,
+      possibleTeams,
+      existingTeamsCount: existingTeams.length
+    };
+  };
+
   if (loading && events.length === 0) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -298,12 +468,17 @@ const CreateTeamPage = () => {
     );
   }
 
+  const stats = getEventStatistics();
+
   return (
     <div style={{ padding: 24 }}>
       <Button 
         type="text" 
         icon={<ArrowLeftOutlined />} 
-        onClick={() => navigate(`/dashboard/teams/${userId}`)}
+        onClick={() => {
+          clearSavedState();
+          navigate(`/dashboard/teams/${userId}`);
+        }}
         style={{ marginBottom: 16 }}
       >
         Back to Teams
@@ -340,6 +515,25 @@ const CreateTeamPage = () => {
                 ? ' Individual participation' 
                 : ` ${teamSizeConfig[selectedEvent.gameType] || 'Not specified'}`}
             </p>
+            
+            {stats && (
+              <div style={{ marginTop: 16 }}>
+                <Alert
+                  type="info"
+                  showIcon
+                  message="Event Statistics"
+                  description={
+                    <div>
+                      <p>Total Participants: <Badge count={stats.totalParticipants} style={{ backgroundColor: '#52c41a' }} /></p>
+                      <p>Already Assigned: <Badge count={stats.assignedCount} style={{ backgroundColor: '#faad14' }} /></p>
+                      <p>Available: <Badge count={stats.availableCount} style={{ backgroundColor: '#1890ff' }} /></p>
+                      <p>Existing Teams: <Badge count={stats.existingTeamsCount} style={{ backgroundColor: '#722ed1' }} /></p>
+                      <p>Possible New Teams: <Badge count={stats.possibleTeams} style={{ backgroundColor: '#eb2f96' }} /></p>
+                    </div>
+                  }
+                />
+              </div>
+            )}
           </div>
         ) : (
           <Alert 
@@ -358,6 +552,13 @@ const CreateTeamPage = () => {
               <Card 
                 title={`Available Participants (${participants.length})`}
                 loading={loading}
+                extra={
+                  stats && stats.assignedCount > 0 && (
+                    <Tag color="orange">
+                      {stats.assignedCount} already assigned
+                    </Tag>
+                  )
+                }
               >
                 <Droppable droppableId="participants">
                   {(provided) => (
@@ -372,50 +573,74 @@ const CreateTeamPage = () => {
                       }}
                     >
                       {participants.length > 0 ? (
-                        participants.map((participant, index) => (
-                          <Draggable 
-                            key={participant.id} 
-                            draggableId={participant.id} 
-                            index={index}
-                          >
-                            {(provided) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                style={{
-                                  userSelect: 'none',
-                                  padding: '12px',
-                                  margin: '0 0 8px 0',
-                                  backgroundColor: '#fff',
-                                  border: '1px solid #d9d9d9',
-                                  borderRadius: '4px',
-                                  ...provided.draggableProps.style
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <Avatar 
-                                    size="small" 
-                                    icon={<UserOutlined />} 
-                                    style={{ marginRight: 8, backgroundColor: '#1890ff' }} 
-                                  />
-                                  <div>
-                                    <div>{participant.name}</div>
-                                    <div style={{ fontSize: '12px', color: '#666' }}>
-                                      {participant.games.map(game => (
-                                        <Tag color={getGameColor(game)} key={game} style={{ marginRight: 4, marginTop: 4 }}>
-                                          {game}
-                                        </Tag>
-                                      ))}
+                        participants.map((participant, index) => {
+                          const isAssigned = assignedParticipants.has(participant.id);
+                          return (
+                            <Draggable 
+                              key={participant.id} 
+                              draggableId={participant.id} 
+                              index={index}
+                              isDragDisabled={isAssigned} // Disable dragging for assigned participants
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  style={{
+                                    userSelect: 'none',
+                                    padding: '12px',
+                                    margin: '0 0 8px 0',
+                                    backgroundColor: isAssigned ? '#f5f5f5' : '#fff',
+                                    border: `1px solid ${isAssigned ? '#d9d9d9' : '#d9d9d9'}`,
+                                    borderRadius: '4px',
+                                    opacity: isAssigned ? 0.6 : 1,
+                                    cursor: isAssigned ? 'not-allowed' : 'grab',
+                                    ...provided.draggableProps.style
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <Avatar 
+                                        size="small" 
+                                        icon={<UserOutlined />} 
+                                        style={{ 
+                                          marginRight: 8, 
+                                          backgroundColor: isAssigned ? '#faad14' : '#1890ff' 
+                                        }} 
+                                      />
+                                      <div>
+                                        <div style={{ color: isAssigned ? '#666' : '#000' }}>
+                                          {participant.name}
+                                        </div>
+                                        <div style={{ fontSize: '12px', color: '#666' }}>
+                                          {participant.games.map(game => (
+                                            <Tag color={getGameColor(game)} key={game} style={{ marginRight: 4, marginTop: 4 }}>
+                                              {game}
+                                            </Tag>
+                                          ))}
+                                        </div>
+                                      </div>
                                     </div>
+                                    {isAssigned && (
+                                      <Tag icon={<LockOutlined />} color="orange">
+                                        Assigned
+                                      </Tag>
+                                    )}
                                   </div>
                                 </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))
+                              )}
+                            </Draggable>
+                          );
+                        })
                       ) : (
-                        <Empty description="No participants available" />
+                        <Empty 
+                          description={
+                            stats && stats.assignedCount > 0 
+                              ? `All participants are already assigned to teams` 
+                              : "No participants available"
+                          } 
+                        />
                       )}
                       {provided.placeholder}
                     </div>
@@ -497,7 +722,11 @@ const CreateTeamPage = () => {
 
             <Col span={24}>
               <Card title="Team Details">
-                <Form form={form} layout="vertical">
+                <Form 
+                  form={form} 
+                  layout="vertical"
+                  onValuesChange={handleFormValuesChange}
+                >
                   <Form.Item
                     name="teamName"
                     label="Team Name"

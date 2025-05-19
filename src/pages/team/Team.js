@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  collection, getDocs, doc, setDoc, updateDoc, 
+  collection, getDocs, doc, setDoc, updateDoc, deleteDoc,
   query, where, arrayUnion, addDoc, serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../../utils/constants/Firebase';
@@ -9,26 +9,29 @@ import {
   Button, Card, Table, Tag, Tabs, Select, 
   message, Empty, Modal, Form, Input, Spin, List,
   DatePicker, TimePicker, Space, Popover, Badge, Divider,
-  Comment, Avatar, Tooltip
+  Comment, Avatar, Tooltip, Dropdown, Menu, Checkbox
 } from 'antd';
 import { 
   TeamOutlined, UserOutlined, 
   PlusOutlined, TrophyOutlined,
   CalendarOutlined, ClockCircleOutlined,
   InfoCircleOutlined, SolutionOutlined,
-  MessageOutlined, SendOutlined
+  MessageOutlined, SendOutlined, MoreOutlined,
+  EditOutlined, DeleteOutlined, ExclamationCircleOutlined
 } from '@ant-design/icons';
 import moment from 'moment';
 import './team.css';
 
 const { TabPane } = Tabs;
 const { Option } = Select;
+const { confirm } = Modal;
 
 const Teams = () => {
   const { userId } = useParams();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [selectedEventName, setSelectedEventName] = useState('');
   const [participants, setParticipants] = useState([]);
   const [teams, setTeams] = useState([]);
   const navigate = useNavigate();
@@ -36,6 +39,10 @@ const Teams = () => {
   const [allUsers, setAllUsers] = useState({});
   const [playerTeams, setPlayerTeams] = useState([]);
   const [playerEvents, setPlayerEvents] = useState([]);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingTeam, setEditingTeam] = useState(null);
+  const [editForm] = Form.useForm();
 
   const teamSizeConfig = {
     'Football': 11,
@@ -48,6 +55,149 @@ const Teams = () => {
     'Swimming': 1
   };
 
+  // Handle event selection logic
+  const handleEventSelect = async (eventId) => {
+    if (!eventId) {
+      clearEventSelection();
+      return;
+    }
+    
+    localStorage.setItem('selectedEventId', eventId);
+    
+    const event = events.find(e => e.id === eventId) || playerEvents.find(e => e.id === eventId);
+    if (!event) {
+      console.error('Selected event not found');
+      return;
+    }
+    
+    setSelectedEvent(event);
+    setSelectedEventName(event.title);
+    
+    try {
+      await fetchParticipants(event);
+    } catch (error) {
+      console.error('Error fetching participants:', error);
+      message.error('Failed to load participants');
+    }
+  };
+
+  // Separate function to fetch participants
+  const fetchParticipants = async (event) => {
+    if (!event || !event.participants || event.participants.length === 0) {
+      setParticipants([]);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const participantPromises = event.participants.map(async (participantId) => {
+        const userQuery = query(collection(db, 'users'), where('uniqueId', '==', participantId));
+        const querySnapshot = await getDocs(userQuery);
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          return {
+            key: participantId,
+            id: participantId,
+            name: `${userDoc.data().firstName || ''} ${userDoc.data().lastName || ''}`.trim() || userDoc.id,
+            email: userDoc.id,
+            games: userDoc.data().selectedGames || []
+          };
+        }
+        return null;
+      });
+
+      const participantData = (await Promise.all(participantPromises)).filter(Boolean);
+      setParticipants(participantData);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete team function
+  const handleDeleteTeam = async (teamId, teamName) => {
+    confirm({
+      title: 'Delete Team',
+      icon: <ExclamationCircleOutlined />,
+      content: `Are you sure you want to delete "${teamName}"? This action cannot be undone.`,
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await deleteDoc(doc(db, 'teams', teamId));
+          
+          // Refresh teams list
+          const teamsQuery = query(collection(db, 'teams'), where('coachId', '==', userId));
+          const teamsSnapshot = await getDocs(teamsQuery);
+          const updatedTeams = [];
+          teamsSnapshot.forEach((doc) => {
+            updatedTeams.push({ id: doc.id, ...doc.data() });
+          });
+          setTeams(updatedTeams);
+          
+          message.success(`Team "${teamName}" deleted successfully`);
+        } catch (error) {
+          console.error('Error deleting team:', error);
+          message.error('Failed to delete team');
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
+  // Open edit modal
+  const handleEditTeam = (team) => {
+    setEditingTeam(team);
+    editForm.setFieldsValue({
+      name: team.name,
+      participants: team.participants
+    });
+    setEditModalVisible(true);
+  };
+
+  // Save team edits
+  const handleSaveTeamEdit = async (values) => {
+    try {
+      setLoading(true);
+      const teamRef = doc(db, 'teams', editingTeam.id);
+      
+      await updateDoc(teamRef, {
+        name: values.name,
+        participants: values.participants,
+        updatedAt: serverTimestamp()
+      });
+
+      // Refresh teams list
+      const teamsQuery = query(collection(db, 'teams'), where('coachId', '==', userId));
+      const teamsSnapshot = await getDocs(teamsQuery);
+      const updatedTeams = [];
+      teamsSnapshot.forEach((doc) => {
+        updatedTeams.push({ id: doc.id, ...doc.data() });
+      });
+      setTeams(updatedTeams);
+
+      message.success('Team updated successfully');
+      setEditModalVisible(false);
+      setEditingTeam(null);
+      editForm.resetFields();
+    } catch (error) {
+      console.error('Error updating team:', error);
+      message.error('Failed to update team');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setEditModalVisible(false);
+    setEditingTeam(null);
+    editForm.resetFields();
+  };
+
+  // Initial data loading
   useEffect(() => {
     const fetchUserDataAndEvents = async () => {
       try {
@@ -75,51 +225,48 @@ const Teams = () => {
         if (currentUser) {
           setUserType(currentUser.userType);
           
+          let userEvents = [];
+          let userTeams = [];
+          
           if (currentUser.userType === 'player') {
-            // Fetch teams where player is a participant
             const playerTeamsQuery = query(collection(db, 'teams'), where('participants', 'array-contains', userId));
             const playerTeamsSnapshot = await getDocs(playerTeamsQuery);
-            const playerTeamsData = [];
             
             playerTeamsSnapshot.forEach((doc) => {
-              playerTeamsData.push({ id: doc.id, ...doc.data() });
+              userTeams.push({ id: doc.id, ...doc.data() });
             });
             
-            setPlayerTeams(playerTeamsData);
+            setPlayerTeams(userTeams);
             
-            // Fetch events player has joined
             const playerEventsQuery = query(collection(db, 'events'), where('participants', 'array-contains', userId));
             const playerEventsSnapshot = await getDocs(playerEventsQuery);
-            const playerEventsData = [];
             
             playerEventsSnapshot.forEach((doc) => {
-              playerEventsData.push({ id: doc.id, ...doc.data() });
+              userEvents.push({ id: doc.id, ...doc.data() });
             });
             
-            setPlayerEvents(playerEventsData);
+            setPlayerEvents(userEvents);
           } else if (currentUser.userType === 'coach') {
-            // Fetch events created by coach
             const eventsQuery = query(collection(db, 'events'), where('coachId', '==', userId));
             const eventsSnapshot = await getDocs(eventsQuery);
-            const coachEvents = [];
             
             eventsSnapshot.forEach((doc) => {
-              coachEvents.push({ id: doc.id, ...doc.data() });
+              userEvents.push({ id: doc.id, ...doc.data() });
             });
             
-            setEvents(coachEvents);
+            setEvents(userEvents);
             
-            // Fetch teams created by coach
             const teamsQuery = query(collection(db, 'teams'), where('coachId', '==', userId));
             const teamsSnapshot = await getDocs(teamsQuery);
-            const coachTeams = [];
             
             teamsSnapshot.forEach((doc) => {
-              coachTeams.push({ id: doc.id, ...doc.data() });
+              userTeams.push({ id: doc.id, ...doc.data() });
             });
             
-            setTeams(coachTeams);
+            setTeams(userTeams);
           }
+          
+          setInitialLoadComplete(true);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -132,42 +279,26 @@ const Teams = () => {
     fetchUserDataAndEvents();
   }, [userId]);
 
-  const handleEventSelect = async (eventId) => {
-    const event = events.find(e => e.id === eventId) || playerEvents.find(e => e.id === eventId);
-    setSelectedEvent(event);
-    
-    if (event && event.participants && event.participants.length > 0) {
-      try {
-        setLoading(true);
-        // Fetch participant details
-        const participantPromises = event.participants.map(async (participantId) => {
-          const userQuery = query(collection(db, 'users'), where('uniqueId', '==', participantId));
-          const querySnapshot = await getDocs(userQuery);
-          if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            return {
-              key: participantId,
-              id: participantId,
-              name: `${userDoc.data().firstName || ''} ${userDoc.data().lastName || ''}`.trim() || userDoc.id,
-              email: userDoc.id,
-              games: userDoc.data().selectedGames || []
-            };
-          }
-          return null;
-        });
-
-        const participantData = (await Promise.all(participantPromises)).filter(Boolean);
-        setParticipants(participantData);
-      } catch (error) {
-        console.error('Error fetching participants:', error);
-        message.error('Failed to load participants');
-      } finally {
-        setLoading(false);
+  // Effect to restore selected event after initial data load
+  useEffect(() => {
+    const restoreSelectedEvent = async () => {
+      if (!initialLoadComplete) return;
+      
+      const savedEventId = localStorage.getItem('selectedEventId');
+      if (!savedEventId) return;
+      
+      const relevantEvents = userType === 'coach' ? events : playerEvents;
+      const foundEvent = relevantEvents.find(e => e.id === savedEventId);
+      
+      if (foundEvent) {
+        setSelectedEvent(foundEvent);
+        setSelectedEventName(foundEvent.title);
+        await fetchParticipants(foundEvent);
       }
-    } else {
-      setParticipants([]);
-    }
-  };
+    };
+    
+    restoreSelectedEvent();
+  }, [initialLoadComplete, events, playerEvents, userType]);
 
   const getGameColor = (gameType) => {
     const colors = {
@@ -312,7 +443,6 @@ const Teams = () => {
         dataIndex: 'email',
         key: 'email',
       },
-    
       {
         title: 'Games',
         dataIndex: 'games',
@@ -345,6 +475,26 @@ const Teams = () => {
           const { date, time } = formatDateTime(team.matchDateTime);
           const isIndividualSport = teamSizeConfig[team.gameType] === 1;
           
+          const teamActions = (
+            <Menu>
+              <Menu.Item 
+                key="edit" 
+                icon={<EditOutlined />}
+                onClick={() => handleEditTeam(team)}
+              >
+                Edit Team
+              </Menu.Item>
+              <Menu.Item 
+                key="delete" 
+                icon={<DeleteOutlined />}
+                danger
+                onClick={() => handleDeleteTeam(team.id, team.name)}
+              >
+                Delete Team
+              </Menu.Item>
+            </Menu>
+          );
+          
           return (
             <Card 
               key={team.id}
@@ -358,11 +508,16 @@ const Teams = () => {
                 </div>
               }
               extra={
-                isIndividualSport ? (
-                  <Tag color="gold">Individual Event</Tag>
-                ) : (
-                  <Tag color="blue">Team of {team.participants.length}</Tag>
-                )
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isIndividualSport ? (
+                    <Tag color="gold">Individual Event</Tag>
+                  ) : (
+                    <Tag color="blue">Team of {team.participants.length}</Tag>
+                  )}
+                  <Dropdown overlay={teamActions} trigger={['click']}>
+                    <Button type="text" icon={<MoreOutlined />} />
+                  </Dropdown>
+                </div>
               }
             >
               <p><TrophyOutlined /> Event: {team.eventName}</p>
@@ -398,6 +553,13 @@ const Teams = () => {
     );
   };
 
+  const clearEventSelection = () => {
+    setSelectedEvent(null);
+    setSelectedEventName('');
+    localStorage.removeItem('selectedEventId');
+    setParticipants([]);
+  };
+
   if (userType === 'player') {
     return (
       <div className="teams-container">
@@ -419,23 +581,36 @@ const Teams = () => {
           
           {playerEvents.length > 0 && (
             <TabPane tab="Event Participation" key="participation">
-              <div className="event-selector">
+              <div className="event-selector" style={{ marginBottom: '20px' }}>
                 <h3>Select Event:</h3>
-                <Select
-                  placeholder="Select an event"
-                  style={{ width: 300 }}
-                  onChange={handleEventSelect}
-                  allowClear
-                >
-                  {playerEvents.map(event => (
-                    <Option key={event.id} value={event.id}>
-                      {event.title} ({event.gameType})
-                    </Option>
-                  ))}
-                </Select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Select
+                    placeholder="Select an event"
+                    style={{ width: 300 }}
+                    onChange={handleEventSelect}
+                    value={selectedEvent?.id}
+                    allowClear
+                  >
+                    {playerEvents.map(event => (
+                      <Option key={event.id} value={event.id}>
+                        {event.title} ({event.gameType})
+                      </Option>
+                    ))}
+                  </Select>
+                  {selectedEvent && (
+                    <Button type="link" onClick={clearEventSelection}>Clear Selection</Button>
+                  )}
+                </div>
+                {selectedEventName && (
+                  <div style={{ marginTop: '10px' }}>
+                    <Tag color="blue" style={{ fontSize: '14px', padding: '4px 8px' }}>
+                      Currently viewing: {selectedEventName}
+                    </Tag>
+                  </div>
+                )}
               </div>
               
-              {selectedEvent && (
+              {selectedEvent ? (
                 <div style={{ marginTop: 20 }}>
                   <Table 
                     dataSource={participants} 
@@ -444,6 +619,8 @@ const Teams = () => {
                     pagination={{ pageSize: 10 }}
                   />
                 </div>
+              ) : (
+                <Empty description="Please select an event to view participants" />
               )}
             </TabPane>
           )}
@@ -481,20 +658,33 @@ const Teams = () => {
         </div>
       ) : (
         <>
-          <div className="event-selector">
+          <div className="event-selector" style={{ marginBottom: '20px' }}>
             <h3>Select Event:</h3>
-            <Select
-              placeholder="Select an event"
-              style={{ width: 300 }}
-              onChange={handleEventSelect}
-              allowClear
-            >
-              {events.map(event => (
-                <Option key={event.id} value={event.id}>
-                  {event.title} ({event.gameType})
-                </Option>
-              ))}
-            </Select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Select
+                placeholder="Select an event"
+                style={{ width: 300 }}
+                onChange={handleEventSelect}
+                value={selectedEvent?.id}
+                allowClear
+              >
+                {events.map(event => (
+                  <Option key={event.id} value={event.id}>
+                    {event.title} ({event.gameType})
+                  </Option>
+                ))}
+              </Select>
+              {selectedEvent && (
+                <Button type="link" onClick={clearEventSelection}>Clear Selection</Button>
+              )}
+            </div>
+            {selectedEventName && (
+              <div style={{ marginTop: '10px' }}>
+                <Tag color="blue" style={{ fontSize: '14px', padding: '4px 8px' }}>
+                  Currently viewing: {selectedEventName}
+                </Tag>
+              </div>
+            )}
           </div>
 
           <Tabs defaultActiveKey="participants" className="teams-tabs">
@@ -540,6 +730,56 @@ const Teams = () => {
               {renderCoachTeamsView()}
             </TabPane>
           </Tabs>
+
+          {/* Edit Team Modal */}
+          <Modal
+            title="Edit Team"
+            visible={editModalVisible}
+            onCancel={handleCancelEdit}
+            footer={null}
+            width={600}
+          >
+            <Form
+              form={editForm}
+              layout="vertical"
+              onFinish={handleSaveTeamEdit}
+            >
+              <Form.Item
+                name="name"
+                label="Team Name"
+                rules={[{ required: true, message: 'Please enter team name' }]}
+              >
+                <Input placeholder="Enter team name" />
+              </Form.Item>
+
+              <Form.Item
+                name="participants"
+                label="Team Members"
+                rules={[{ required: true, message: 'Please select team members' }]}
+              >
+                <Checkbox.Group style={{ width: '100%' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '8px' }}>
+                    {participants.map(participant => (
+                      <Checkbox key={participant.id} value={participant.id}>
+                        {participant.name} ({participant.email})
+                      </Checkbox>
+                    ))}
+                  </div>
+                </Checkbox.Group>
+              </Form.Item>
+
+              <Form.Item>
+                <Space>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    Save Changes
+                  </Button>
+                  <Button onClick={handleCancelEdit}>
+                    Cancel
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </Modal>
         </>
       )}
     </div>

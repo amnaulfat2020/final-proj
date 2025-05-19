@@ -40,6 +40,7 @@ const Routers = () => {
   path="/dashboard/teams/create/:userId/:eventId" 
   element={<LayoutSideBar currentPage="Teams"><CreateTeamPage /></LayoutSideBar>} 
 />
+
           <Route path="/register" element={<Registration />} />
           {/* <Route path="/term-condition" element={<TermAndCondition />} /> */}
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
