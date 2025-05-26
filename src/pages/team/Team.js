@@ -9,7 +9,8 @@ import {
   Button, Card, Table, Tag, Tabs, Select, 
   message, Empty, Modal, Form, Input, Spin, List,
   DatePicker, TimePicker, Space, Popover, Badge, Divider,
-  Comment, Avatar, Tooltip, Dropdown, Menu, Checkbox
+  Comment, Avatar, Tooltip, Dropdown, Menu, Checkbox,
+  Row, Col, Typography, InputNumber
 } from 'antd';
 import { 
   TeamOutlined, UserOutlined, 
@@ -17,11 +18,13 @@ import {
   CalendarOutlined, ClockCircleOutlined,
   InfoCircleOutlined, SolutionOutlined,
   MessageOutlined, SendOutlined, MoreOutlined,
-  EditOutlined, DeleteOutlined, ExclamationCircleOutlined
+  EditOutlined, DeleteOutlined, ExclamationCircleOutlined,
+  SwapOutlined, ScheduleOutlined
 } from '@ant-design/icons';
 import moment from 'moment';
 import './team.css';
 
+const { Title, Text } = Typography;
 const { TabPane } = Tabs;
 const { Option } = Select;
 const { confirm } = Modal;
@@ -34,6 +37,7 @@ const Teams = () => {
   const [selectedEventName, setSelectedEventName] = useState('');
   const [participants, setParticipants] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [matches, setMatches] = useState([]);
   const navigate = useNavigate();
   const [userType, setUserType] = useState('');
   const [allUsers, setAllUsers] = useState({});
@@ -42,7 +46,10 @@ const Teams = () => {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingTeam, setEditingTeam] = useState(null);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [selectedTeams, setSelectedTeams] = useState([]);
   const [editForm] = Form.useForm();
+  const [scheduleForm] = Form.useForm();
 
   const teamSizeConfig = {
     'Football': 11,
@@ -75,9 +82,30 @@ const Teams = () => {
     
     try {
       await fetchParticipants(event);
+      await fetchMatches(eventId);
     } catch (error) {
       console.error('Error fetching participants:', error);
       message.error('Failed to load participants');
+    }
+  };
+
+  // Fetch matches for an event
+  const fetchMatches = async (eventId) => {
+    if (userType !== 'coach') return;
+    
+    try {
+      const matchesQuery = query(collection(db, 'matches'), where('eventId', '==', eventId));
+      const matchesSnapshot = await getDocs(matchesQuery);
+      const matchesData = [];
+      
+      matchesSnapshot.forEach((doc) => {
+        matchesData.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setMatches(matchesData);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      message.error('Failed to load matches');
     }
   };
 
@@ -197,6 +225,116 @@ const Teams = () => {
     editForm.resetFields();
   };
 
+  // Open schedule match modal
+  const handleOpenScheduleModal = (teams) => {
+    if (teams.length !== 2) {
+      message.warning('Please select exactly 2 teams to schedule a match');
+      return;
+    }
+    
+    setSelectedTeams(teams);
+    scheduleForm.setFieldsValue({
+      team1: teams[0].id,
+      team2: teams[1].id,
+      date: moment(),
+      time: moment(),
+      location: '',
+      description: ''
+    });
+    setScheduleModalVisible(true);
+  };
+
+  // Fixed handleScheduleMatch function in Teams.js
+const handleScheduleMatch = async (values) => {
+  try {
+    setLoading(true);
+    
+    const matchDateTime = moment(values.date)
+      .hour(values.time.hour())
+      .minute(values.time.minute())
+      .toISOString();
+    
+    // Get both teams
+    const team1 = teams.find(t => t.id === values.team1);
+    const team2 = teams.find(t => t.id === values.team2);
+    
+    if (!team1 || !team2) {
+      message.error('Selected teams not found');
+      return;
+    }
+    
+    // Get all participants from both teams
+    const allParticipants = [...new Set([...team1.participants, ...team2.participants])];
+    
+    console.log('Creating match with participants:', allParticipants); // Debug log
+    
+    const matchData = {
+      eventId: selectedEvent.id,
+      eventName: selectedEvent.title,
+      gameType: selectedEvent.gameType, // Add game type
+      team1Id: values.team1,
+      team2Id: values.team2,
+      team1Name: team1.name,
+      team2Name: team2.name,
+      team1Participants: team1.participants, // Store individual team participants
+      team2Participants: team2.participants, // Store individual team participants
+      matchDateTime,
+      location: values.location,
+      description: values.description || '',
+      status: 'scheduled',
+      createdBy: userId,
+      coachId: userId, // Add coach ID for easier queries
+      participants: allParticipants, // Store all participants for player queries
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    
+    // Create the match
+    const docRef = await addDoc(collection(db, 'matches'), matchData);
+    console.log('Match created with ID:', docRef.id); // Debug log
+    
+    // Update teams with match info
+    const updatePromises = [
+      updateDoc(doc(db, 'teams', values.team1), {
+        matchDateTime,
+        hasMatch: true,
+        matchId: docRef.id,
+        updatedAt: serverTimestamp()
+      }),
+      updateDoc(doc(db, 'teams', values.team2), {
+        matchDateTime,
+        hasMatch: true,
+        matchId: docRef.id,
+        updatedAt: serverTimestamp()
+      })
+    ];
+    
+    await Promise.all(updatePromises);
+    
+    // Refresh matches data
+    await fetchMatches(selectedEvent.id);
+    
+    // Refresh teams data
+    const teamsQuery = query(collection(db, 'teams'), where('coachId', '==', userId));
+    const teamsSnapshot = await getDocs(teamsQuery);
+    const updatedTeams = [];
+    teamsSnapshot.forEach((doc) => {
+      updatedTeams.push({ id: doc.id, ...doc.data() });
+    });
+    setTeams(updatedTeams);
+    
+    message.success('Match scheduled successfully!');
+    setScheduleModalVisible(false);
+    scheduleForm.resetFields();
+    setSelectedTeams([]);
+    
+  } catch (error) {
+    console.error('Error scheduling match:', error);
+    message.error('Failed to schedule match: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
   // Initial data loading
   useEffect(() => {
     const fetchUserDataAndEvents = async () => {
@@ -227,8 +365,10 @@ const Teams = () => {
           
           let userEvents = [];
           let userTeams = [];
+          let userMatches = [];
           
           if (currentUser.userType === 'player') {
+            // Fetch player teams
             const playerTeamsQuery = query(collection(db, 'teams'), where('participants', 'array-contains', userId));
             const playerTeamsSnapshot = await getDocs(playerTeamsQuery);
             
@@ -238,6 +378,7 @@ const Teams = () => {
             
             setPlayerTeams(userTeams);
             
+            // Fetch player events
             const playerEventsQuery = query(collection(db, 'events'), where('participants', 'array-contains', userId));
             const playerEventsSnapshot = await getDocs(playerEventsQuery);
             
@@ -246,7 +387,21 @@ const Teams = () => {
             });
             
             setPlayerEvents(userEvents);
+            
+            // Fetch player matches
+            const playerMatchesQuery = query(
+              collection(db, 'matches'),
+              where('participants', 'array-contains', userId)
+            );
+            const playerMatchesSnapshot = await getDocs(playerMatchesQuery);
+            
+            playerMatchesSnapshot.forEach((doc) => {
+              userMatches.push({ id: doc.id, ...doc.data() });
+            });
+            
+            setMatches(userMatches);
           } else if (currentUser.userType === 'coach') {
+            // Fetch coach events
             const eventsQuery = query(collection(db, 'events'), where('coachId', '==', userId));
             const eventsSnapshot = await getDocs(eventsQuery);
             
@@ -256,6 +411,7 @@ const Teams = () => {
             
             setEvents(userEvents);
             
+            // Fetch coach teams
             const teamsQuery = query(collection(db, 'teams'), where('coachId', '==', userId));
             const teamsSnapshot = await getDocs(teamsQuery);
             
@@ -264,6 +420,19 @@ const Teams = () => {
             });
             
             setTeams(userTeams);
+            
+            // Fetch coach matches
+            const matchesQuery = query(
+              collection(db, 'matches'),
+              where('createdBy', '==', userId)
+            );
+            const matchesSnapshot = await getDocs(matchesQuery);
+            
+            matchesSnapshot.forEach((doc) => {
+              userMatches.push({ id: doc.id, ...doc.data() });
+            });
+            
+            setMatches(userMatches);
           }
           
           setInitialLoadComplete(true);
@@ -294,6 +463,9 @@ const Teams = () => {
         setSelectedEvent(foundEvent);
         setSelectedEventName(foundEvent.title);
         await fetchParticipants(foundEvent);
+        if (userType === 'coach') {
+          await fetchMatches(foundEvent.id);
+        }
       }
     };
     
@@ -417,6 +589,101 @@ const Teams = () => {
               <div className="team-coach-info">
                 <p><strong>Coach:</strong> {allUsers[team.coachId]?.name || 'Unknown Coach'}</p>
                 <p><strong>Contact:</strong> {allUsers[team.coachId]?.email || 'Not available'}</p>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderPlayerMatchesView = () => {
+    if (matches.length === 0) {
+      return (
+        <Empty 
+          description="You don't have any scheduled matches yet" 
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
+      );
+    }
+
+    return (
+      <div className="matches-grid">
+        {matches.map(match => {
+          const { date, time } = formatDateTime(match.matchDateTime);
+          
+          return (
+            <Card 
+              key={match.id}
+              className="match-card"
+              title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{match.team1Name} vs {match.team2Name}</span>
+                  <Tag color={getGameColor(selectedEvent?.gameType)}>
+                    {selectedEvent?.gameType}
+                  </Tag>
+                </div>
+              }
+            >
+              <p><TrophyOutlined /> Event: {match.eventName}</p>
+              
+              <div className="match-info">
+                <CalendarOutlined /> Match Date: {date}
+                <ClockCircleOutlined style={{ marginLeft: 12 }} /> Time: {time}
+              </div>
+              
+              {match.location && (
+                <p><InfoCircleOutlined /> Location: {match.location}</p>
+              )}
+              
+              {match.description && (
+                <>
+                  <Divider orientation="left" plain>Match Details</Divider>
+                  <p>{match.description}</p>
+                </>
+              )}
+              
+              <Divider orientation="left" plain>
+                <TeamOutlined /> Teams
+              </Divider>
+              
+              <div className="teams-info">
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Card size="small" title={match.team1Name}>
+                      <List
+                        size="small"
+                        dataSource={teams.find(t => t.id === match.team1Id)?.participants || []}
+                        renderItem={playerId => (
+                          <List.Item>
+                            <UserOutlined style={{ marginRight: 8 }} /> 
+                            {getPlayerDisplayName(playerId)}
+                            {playerId === userId && (
+                              <Tag color="blue" style={{ marginLeft: 8 }}>You</Tag>
+                            )}
+                          </List.Item>
+                        )}
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card size="small" title={match.team2Name}>
+                      <List
+                        size="small"
+                        dataSource={teams.find(t => t.id === match.team2Id)?.participants || []}
+                        renderItem={playerId => (
+                          <List.Item>
+                            <UserOutlined style={{ marginRight: 8 }} /> 
+                            {getPlayerDisplayName(playerId)}
+                            {playerId === userId && (
+                              <Tag color="blue" style={{ marginLeft: 8 }}>You</Tag>
+                            )}
+                          </List.Item>
+                        )}
+                      />
+                    </Card>
+                  </Col>
+                </Row>
               </div>
             </Card>
           );
@@ -553,18 +820,132 @@ const Teams = () => {
     );
   };
 
+  const renderCoachMatchesView = () => {
+    const filteredMatches = selectedEvent 
+      ? matches.filter(match => match.eventId === selectedEvent.id)
+      : matches;
+
+    if (filteredMatches.length === 0) {
+      return <Empty description="No matches scheduled yet" />;
+    }
+
+    return (
+      <div className="matches-grid">
+        {filteredMatches.map(match => {
+          const { date, time } = formatDateTime(match.matchDateTime);
+          
+          const matchActions = (
+            <Menu>
+              <Menu.Item 
+                key="edit" 
+                icon={<EditOutlined />}
+                onClick={() => console.log('Edit match', match.id)}
+              >
+                Edit Match
+              </Menu.Item>
+              <Menu.Item 
+                key="delete" 
+                icon={<DeleteOutlined />}
+                danger
+                onClick={() => console.log('Delete match', match.id)}
+              >
+                Delete Match
+              </Menu.Item>
+            </Menu>
+          );
+          
+          return (
+            <Card 
+              key={match.id}
+              className="match-card"
+              title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{match.team1Name} vs {match.team2Name}</span>
+                  <Tag color={getGameColor(selectedEvent?.gameType)}>
+                    {selectedEvent?.gameType}
+                  </Tag>
+                </div>
+              }
+              extra={
+                <Dropdown overlay={matchActions} trigger={['click']}>
+                  <Button type="text" icon={<MoreOutlined />} />
+                </Dropdown>
+              }
+            >
+              <p><TrophyOutlined /> Event: {match.eventName}</p>
+              
+              <div className="match-info">
+                <CalendarOutlined /> Match Date: {date}
+                <ClockCircleOutlined style={{ marginLeft: 12 }} /> Time: {time}
+              </div>
+              
+              {match.location && (
+                <p><InfoCircleOutlined /> Location: {match.location}</p>
+              )}
+              
+              {match.description && (
+                <>
+                  <Divider orientation="left" plain>Match Details</Divider>
+                  <p>{match.description}</p>
+                </>
+              )}
+              
+              <Divider orientation="left" plain>
+                <TeamOutlined /> Teams
+              </Divider>
+              
+              <div className="teams-info">
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Card size="small" title={match.team1Name}>
+                      <List
+                        size="small"
+                        dataSource={teams.find(t => t.id === match.team1Id)?.participants || []}
+                        renderItem={playerId => (
+                          <List.Item>
+                            <UserOutlined style={{ marginRight: 8 }} /> 
+                            {getPlayerDisplayName(playerId)}
+                          </List.Item>
+                        )}
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card size="small" title={match.team2Name}>
+                      <List
+                        size="small"
+                        dataSource={teams.find(t => t.id === match.team2Id)?.participants || []}
+                        renderItem={playerId => (
+                          <List.Item>
+                            <UserOutlined style={{ marginRight: 8 }} /> 
+                            {getPlayerDisplayName(playerId)}
+                          </List.Item>
+                        )}
+                      />
+                    </Card>
+                  </Col>
+                </Row>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   const clearEventSelection = () => {
     setSelectedEvent(null);
     setSelectedEventName('');
     localStorage.removeItem('selectedEventId');
     setParticipants([]);
+    setMatches([]);
   };
 
   if (userType === 'player') {
     return (
       <div className="teams-container">
         <div className="teams-header">
-          <h1>My Teams</h1>
+          <h1>My Teams & Matches</h1>
         </div>
         
         <Tabs defaultActiveKey="teams">
@@ -576,6 +957,17 @@ const Teams = () => {
               </div>
             ) : (
               renderPlayerTeamsView()
+            )}
+          </TabPane>
+          
+          <TabPane tab="My Matches" key="matches">
+            {loading ? (
+              <div className="loading-container">
+                <Spin size="large" />
+                <p>Loading your matches...</p>
+              </div>
+            ) : (
+              renderPlayerMatchesView()
             )}
           </TabPane>
           
@@ -648,7 +1040,7 @@ const Teams = () => {
   return (
     <div className="teams-container">
       <div className="teams-header">
-        <h1>Teams Management</h1>
+        <h1>Teams & Matches Management</h1>
       </div>
 
       {loading ? (
@@ -726,8 +1118,44 @@ const Teams = () => {
                     ? `Teams for ${selectedEvent.title}` 
                     : 'All Teams'}
                 </h2>
+                {selectedEvent && teams.filter(t => t.eventId === selectedEvent.id).length >= 2 && (
+                  <Button 
+                    type="primary" 
+                    icon={<SwapOutlined />}
+                    onClick={() => {
+                      const eventTeams = teams.filter(t => t.eventId === selectedEvent.id);
+                      if (eventTeams.length < 2) {
+                        message.warning('You need at least 2 teams to schedule a match');
+                        return;
+                      }
+                      setSelectedTeams(eventTeams.slice(0, 2));
+                      scheduleForm.setFieldsValue({
+                        team1: eventTeams[0].id,
+                        team2: eventTeams[1].id,
+                        date: moment(),
+                        time: moment(),
+                        location: '',
+                        description: ''
+                      });
+                      setScheduleModalVisible(true);
+                    }}
+                  >
+                    Schedule Match
+                  </Button>
+                )}
               </div>
               {renderCoachTeamsView()}
+            </TabPane>
+            
+            <TabPane tab="Matches" key="matches">
+              <div className="section-header">
+                <h2>
+                  {selectedEvent 
+                    ? `Matches for ${selectedEvent.title}` 
+                    : 'All Matches'}
+                </h2>
+              </div>
+              {renderCoachMatchesView()}
             </TabPane>
           </Tabs>
 
@@ -774,6 +1202,112 @@ const Teams = () => {
                     Save Changes
                   </Button>
                   <Button onClick={handleCancelEdit}>
+                    Cancel
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          {/* Schedule Match Modal */}
+          <Modal
+            title="Schedule New Match"
+            visible={scheduleModalVisible}
+            onCancel={() => setScheduleModalVisible(false)}
+            footer={null}
+            width={800}
+          >
+            <Form
+              form={scheduleForm}
+              layout="vertical"
+              onFinish={handleScheduleMatch}
+            >
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="team1"
+                    label="Team 1"
+                    rules={[{ required: true, message: 'Please select team 1' }]}
+                  >
+                    <Select placeholder="Select team 1">
+                      {teams.filter(t => t.eventId === selectedEvent?.id).map(team => (
+                        <Option key={team.id} value={team.id}>
+                          {team.name}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="team2"
+                    label="Team 2"
+                    rules={[{ 
+                      required: true, 
+                      message: 'Please select team 2' 
+                    }, 
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        if (!value || getFieldValue('team1') !== value) {
+                          return Promise.resolve();
+                        }
+                        return Promise.reject(new Error('Teams must be different'));
+                      },
+                    })]}
+                  >
+                    <Select placeholder="Select team 2">
+                      {teams.filter(t => t.eventId === selectedEvent?.id).map(team => (
+                        <Option key={team.id} value={team.id}>
+                          {team.name}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="date"
+                    label="Match Date"
+                    rules={[{ required: true, message: 'Please select match date' }]}
+                  >
+                    <DatePicker style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="time"
+                    label="Match Time"
+                    rules={[{ required: true, message: 'Please select match time' }]}
+                  >
+                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              
+              <Form.Item
+                name="location"
+                label="Location"
+                rules={[{ required: true, message: 'Please enter match location' }]}
+              >
+                <Input placeholder="Enter match location (e.g., Stadium, Court 1)" />
+              </Form.Item>
+              
+              <Form.Item
+                name="description"
+                label="Match Description (Optional)"
+              >
+                <Input.TextArea rows={4} placeholder="Enter any additional details about the match" />
+              </Form.Item>
+              
+              <Form.Item>
+                <Space>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    Schedule Match
+                  </Button>
+                  <Button onClick={() => setScheduleModalVisible(false)}>
                     Cancel
                   </Button>
                 </Space>

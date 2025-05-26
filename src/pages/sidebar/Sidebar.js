@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { HistoryOutlined } from '@ant-design/icons';
 import { 
   UserOutlined, FileOutlined, LogoutOutlined, 
   TeamOutlined, MenuUnfoldOutlined, MenuFoldOutlined,
-  UsergroupAddOutlined, MessageOutlined, FormOutlined
+  UsergroupAddOutlined, MessageOutlined, FormOutlined,
+  CalendarOutlined
 } from '@ant-design/icons';
 import { Menu, Button, Badge } from 'antd';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { auth, db } from '../../utils/constants/Firebase'; // Added auth import
-import { signOut } from 'firebase/auth'; // Added signOut import
+import { auth, db } from '../../utils/constants/Firebase';
+import { signOut } from 'firebase/auth';
 import './sidebar.css';
 import logo from '../../assets/images/side-logo.png';
 import SideImg from '../../assets/images/hamburger.png';
@@ -29,6 +31,25 @@ const Sidebar = () => {
   const { userId } = useParams();
   const [collapsed, setCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [userType, setUserType] = useState('');
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userQuery = query(collection(db, 'users'), where('uniqueId', '==', userId));
+        const querySnapshot = await getDocs(userQuery);
+        
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          setUserType(userDoc.data().userType);
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, [userId]);
 
   useEffect(() => {
     const fetchUnreadMessages = async () => {
@@ -71,12 +92,15 @@ const Sidebar = () => {
       console.error('Error during logout:', error);
     }
   };
+
   const items = [
     getItem('Dashboard', 'sub1', <UserOutlined />, null, 'item'),
     { type: 'divider' },
     getItem('Events', 'sub2', <FileOutlined />, null, 'item'),
     { type: 'divider' },
     getItem('Teams', 'sub3', <TeamOutlined />, null, 'item'),
+    { type: 'divider' },
+    getItem('Matches', 'sub7', <CalendarOutlined />, null, 'item'),
     { type: 'divider' },
     getItem('Player Evaluation', 'sub6', <FormOutlined />, null, 'item'),
     { type: 'divider' }, 
@@ -85,11 +109,12 @@ const Sidebar = () => {
     getItem(
       <Badge dot={unreadCount > 0}>Conversations</Badge>, 
       'sub5', 
-      // <Badge dot={unreadCount > 0}>
-        <MessageOutlined />
-      // </Badge>
+      <MessageOutlined />
     ),
     { type: 'divider' },
+    getItem('Match History', 'sub8', <HistoryOutlined />, null, 'item'), // Add this line
+    { type: 'divider' },
+  
   ];
 
   const onClick = (e) => {
@@ -119,7 +144,10 @@ const Sidebar = () => {
             if (key === 'sub3') navigate(`/dashboard/teams/${userId}`);
             if (key === 'sub4') navigate(`/members/${userId}`);
             if (key === 'sub6') navigate(`/dashboard/player-evaluation/${userId}`);
+            if (key === 'sub7') navigate(`/dashboard/matches/${userId}`);
             if (key === 'sub5') navigate(`/dashboard/conversations/${userId}`);
+            if (key === 'sub8') navigate(`/dashboard/match-history/${userId}`); // Add this line
+
           }}
           inlineCollapsed={collapsed}
         />
