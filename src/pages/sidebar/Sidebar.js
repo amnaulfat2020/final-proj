@@ -102,8 +102,8 @@ const Sidebar = () => {
     { type: 'divider' },
     getItem('Matches', 'sub7', <CalendarOutlined />, null, 'item'),
     { type: 'divider' },
-    getItem('Player Evaluation', 'sub6', <FormOutlined />, null, 'item'),
-    { type: 'divider' }, 
+    // getItem('Player Evaluation', 'sub6', <FormOutlined />, null, 'item'),
+    // { type: 'divider' }, 
     getItem('Members', 'sub4', <UsergroupAddOutlined />, null, 'item'),
     { type: 'divider' },
     getItem(
@@ -143,7 +143,7 @@ const Sidebar = () => {
             if (key === 'sub2') navigate(`/dashboard/event/${userId}`);
             if (key === 'sub3') navigate(`/dashboard/teams/${userId}`);
             if (key === 'sub4') navigate(`/members/${userId}`);
-            if (key === 'sub6') navigate(`/dashboard/player-evaluation/${userId}`);
+            // if (key === 'sub6') navigate(`/dashboard/player-evaluation/${userId}`);
             if (key === 'sub7') navigate(`/dashboard/matches/${userId}`);
             if (key === 'sub5') navigate(`/dashboard/conversations/${userId}`);
             if (key === 'sub8') navigate(`/dashboard/match-history/${userId}`); // Add this line
