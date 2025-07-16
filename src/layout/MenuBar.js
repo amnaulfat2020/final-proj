@@ -16,6 +16,7 @@ const MenuBar = ({ currentPage, projectTitle }) => {
     const [showProfilePopup, setShowProfilePopup] = useState(false);
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [windowWidth, setWindowWidth] = useState(window.innerWidth);
     const navigate = useNavigate();
 
     const fetchUserData = async () => {
@@ -61,6 +62,16 @@ const MenuBar = ({ currentPage, projectTitle }) => {
         return () => unsubscribe();
     }, []);
 
+    // Handle window resize
+    useEffect(() => {
+        const handleResize = () => {
+            setWindowWidth(window.innerWidth);
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     const handleLogout = () => {
         signOut(auth)
             .then(() => navigate('/'))
@@ -70,10 +81,12 @@ const MenuBar = ({ currentPage, projectTitle }) => {
     return (
         <div style={headerStyles.container}>
             <div style={headerStyles.leftSection}>
-                <Title style={headerStyles.pageTitle}>
-                    {currentPage}
-                    {projectTitle && ` ${projectTitle}`}
-                </Title>
+                {windowWidth >= 750 && (
+                    <Title style={headerStyles.pageTitle}>
+                        {currentPage}
+                        {projectTitle && ` ${projectTitle}`}
+                    </Title>
+                )}
             </div>
             
             <div style={headerStyles.rightSection}>

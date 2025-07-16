@@ -94,22 +94,45 @@ const Conversations = () => {
           }
         }
 
-        // For players, get coaches from their teams
+        // For players, get coaches from their teams AND from their selected games
         if (currentUser.userType === 'player') {
+          // Get coaches from teams (existing logic)
           const teamsQuery = query(collection(db, 'teams'), where('participants', 'array-contains', userId));
           const teamsSnapshot = await getDocs(teamsQuery);
           
-          const coachIds = new Set();
+          const teamCoachIds = new Set();
           teamsSnapshot.forEach((doc) => {
             const teamData = doc.data();
-            if (teamData.coachId) coachIds.add(teamData.coachId);
+            if (teamData.coachId) teamCoachIds.add(teamData.coachId);
           });
+
+          // NEW: Get coaches based on player's selected games during registration
+          const gameCoachIds = new Set();
+          if (currentUser.selectedGames && currentUser.selectedGames.length > 0) {
+            const coachesQuery = query(
+              collection(db, 'users'),
+              where('userType', '==', 'coach'),
+              where('status', '==', 'approved'),
+              where('selectedGames', 'array-contains-any', currentUser.selectedGames)
+            );
+            const coachesSnapshot = await getDocs(coachesQuery);
+            
+            coachesSnapshot.forEach((doc) => {
+              const coachData = doc.data();
+              if (coachData.uniqueId) {
+                gameCoachIds.add(coachData.uniqueId);
+              }
+            });
+          }
+
+          // Combine both team coaches and game-based coaches
+          const allCoachIds = new Set([...teamCoachIds, ...gameCoachIds]);
           
-          setCoaches(Array.from(coachIds).map(id => ({
+          setCoaches(Array.from(allCoachIds).map(id => ({
             id,
             ...usersMap[id],
             type: 'coach'
-          })));
+          })).filter(coach => coach.firstName)); // Filter out any coaches that don't exist in usersMap
         }
 
         // Get actual teammates (from same teams) if player

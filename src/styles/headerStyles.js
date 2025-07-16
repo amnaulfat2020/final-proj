@@ -15,7 +15,6 @@ const headerStyles = {
   },
   leftSection: {
     flex: 1,
-
   },
   centerSection: {
     flex: 2,
@@ -31,8 +30,11 @@ const headerStyles = {
   pageTitle: {
     fontSize: '22px',
     fontWeight: '600',
-    margin: '0  60px',
+    margin: '0 60px',
     color: 'var(--primary-clr)',
+    '@media (max-width: 750px)': {
+      display: 'none',
+    },
   },
   searchInput: {
     width: '200px',
@@ -54,7 +56,6 @@ const headerStyles = {
     border: '1px solid #F1F2F7',
     marginTop: '10px'
   },
-
   ButtonStyle: {
     backgroundColor: '#00DB99',
     padding: '10px 40px 35px 20px',
@@ -65,7 +66,6 @@ const headerStyles = {
     width: "45px",
     cursor: "pointer"
   }
-  
 };
 
 export default headerStyles;

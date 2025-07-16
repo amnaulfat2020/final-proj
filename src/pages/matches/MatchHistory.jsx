@@ -57,28 +57,29 @@ const MatchHistory = () => {
         });
         setAllUsers(usersMap);
         
-        // Fetch ALL completed matches (remove participant filter)
-        const matchesQuery = query(
-          collection(db, 'matches'),
-          where('status', '==', 'completed')
-        );
-        
-        const matchesSnapshot = await getDocs(matchesQuery);
+        // Fetch ALL matches and filter for completed ones
+        const matchesSnapshot = await getDocs(collection(db, 'matches'));
         const matchesData = [];
         matchesSnapshot.forEach((doc) => {
-          matchesData.push({ id: doc.id, ...doc.data() });
+          const matchData = { id: doc.id, ...doc.data() };
+          
+          // Check if match has result and winner (completed)
+          if (matchData.result && matchData.result.winner) {
+            matchesData.push(matchData);
+          }
         });
         
-        // Sort by date (newest first)
-        matchesData.sort((a, b) => 
-          moment(b.result.announcedAt).diff(moment(a.result.announcedAt))
-        );
+        // Sort by result announcement date (newest first)
+        matchesData.sort((a, b) => {
+          const dateA = a.result?.announcedAt ? moment(a.result.announcedAt) : moment(0);
+          const dateB = b.result?.announcedAt ? moment(b.result.announcedAt) : moment(0);
+          return dateB.diff(dateA);
+        });
         
         setCompletedMatches(matchesData);
         
-        // Fetch all teams (remove participant filter)
-        const teamsQuery = query(collection(db, 'teams'));
-        const teamsSnapshot = await getDocs(teamsQuery);
+        // Fetch all teams
+        const teamsSnapshot = await getDocs(collection(db, 'teams'));
         const teamsData = [];
         teamsSnapshot.forEach((doc) => {
           teamsData.push({ id: doc.id, ...doc.data() });
@@ -129,9 +130,16 @@ const MatchHistory = () => {
       render: (_, record) => (
         <div>
           <strong>{record.team1Name} vs {record.team2Name}</strong>
-          <div>{record.eventName}</div>
-          {!wasUserInMatch(record) && (
-            <Tag icon={<EyeOutlined />} color="default">
+          <div style={{ color: '#666', fontSize: '12px' }}>
+            <TrophyOutlined style={{ marginRight: 4 }} />
+            {record.eventName}
+          </div>
+          {wasUserInMatch(record) ? (
+            <Tag color="green" style={{ marginTop: 4 }}>
+              Your Match
+            </Tag>
+          ) : (
+            <Tag icon={<EyeOutlined />} color="default" style={{ marginTop: 4 }}>
               Observer
             </Tag>
           )}
@@ -139,12 +147,25 @@ const MatchHistory = () => {
       )
     },
     {
-      title: 'Date',
+      title: 'Game Type',
+      dataIndex: 'gameType',
+      key: 'gameType',
+      render: (_, record) => (
+        <Tag color="blue">{record.gameType || 'N/A'}</Tag>
+      )
+    },
+    {
+      title: 'Match Date',
       dataIndex: 'date',
       key: 'date',
       render: (_, record) => {
         const { date } = formatDateTime(record.matchDateTime);
-        return date;
+        return (
+          <div>
+            <CalendarOutlined style={{ marginRight: 4 }} />
+            {date}
+          </div>
+        );
       }
     },
     {
@@ -154,20 +175,27 @@ const MatchHistory = () => {
       render: (_, record) => (
         <div>
           <Tag icon={<CrownOutlined />} color="gold">
-            {record.result.winnerTeamName} won
+            {record.result.winnerTeamName} Won
           </Tag>
           {record.result.score && (
-            <div>Score: {record.result.score}</div>
+            <div style={{ marginTop: 4, fontSize: '12px' }}>
+              Score: <strong>{record.result.score}</strong>
+            </div>
           )}
         </div>
       )
     },
     {
-      title: 'Announced On',
+      title: 'Result Announced',
       dataIndex: 'announcedAt',
       key: 'announcedAt',
       render: (_, record) => (
-        moment(record.result.announcedAt).format('MMM DD, YYYY')
+        <div>
+          <div>{moment(record.result.announcedAt).format('MMM DD, YYYY')}</div>
+          <div style={{ fontSize: '11px', color: '#666' }}>
+            {moment(record.result.announcedAt).format('hh:mm A')}
+          </div>
+        </div>
       )
     }
   ];
@@ -186,7 +214,7 @@ const MatchHistory = () => {
       <div className="match-history-header">
         <Title level={2}>Match History</Title>
         <Text type="secondary">
-          View all completed matches in the system
+          View all completed matches in the system ({completedMatches.length} matches found)
         </Text>
         <Alert 
           message="You can view all matches, not just those you participated in"
@@ -208,7 +236,13 @@ const MatchHistory = () => {
                 columns={columns} 
                 dataSource={completedMatches} 
                 rowKey="id"
-                pagination={{ pageSize: 10 }}
+                pagination={{ 
+                  pageSize: 10,
+                  showSizeChanger: true,
+                  showQuickJumper: true,
+                  showTotal: (total, range) => 
+                    `${range[0]}-${range[1]} of ${total} matches`
+                }}
                 expandable={{
                   expandedRowRender: (record) => (
                     <div className="expanded-row">
@@ -275,6 +309,19 @@ const MatchHistory = () => {
                           </div>
                         </Col>
                       </Row>
+                      
+                      {record.location && (
+                        <div style={{ marginTop: 16 }}>
+                          <strong>Location:</strong> {record.location}
+                        </div>
+                      )}
+                      
+                      {record.description && (
+                        <div style={{ marginTop: 8 }}>
+                          <strong>Match Description:</strong> {record.description}
+                        </div>
+                      )}
+                      
                       {record.result.notes && (
                         <>
                           <Divider orientation="left">Match Notes</Divider>
@@ -283,6 +330,10 @@ const MatchHistory = () => {
                           </div>
                         </>
                       )}
+                      
+                      <div style={{ marginTop: 16, fontSize: '12px', color: '#666' }}>
+                        <strong>Result announced by:</strong> Coach on {moment(record.result.announcedAt).format('MMM DD, YYYY at hh:mm A')}
+                      </div>
                     </div>
                   ),
                   rowExpandable: (record) => true,

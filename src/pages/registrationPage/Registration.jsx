@@ -1,4 +1,3 @@
-// src/pages/registrationPage/Registration.js
 import React, { useState, useEffect } from "react";
 import { useFormik } from "formik";
 import { createUserWithEmailAndPassword } from "firebase/auth";
